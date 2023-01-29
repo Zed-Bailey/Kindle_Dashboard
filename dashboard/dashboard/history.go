@@ -2,26 +2,33 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
+	"time"
 )
 
 type HistoryToday struct {
-	Date      string `json:"date"`
-	Wikipedia string `json:"wikipedia"`
-	Events    []struct {
-		Year        int    `json:"year"`
-		Description string `json:"description"`
-		Wikipedia   []struct {
-			Title     string `json:"title"`
-			Wikipedia string `json:"wikipedia"`
-		} `json:"wikipedia"`
-	} `json:"events"`
+	Date      string         `json:"date"`
+	Wikipedia string         `json:"wikipedia"`
+	Events    []HistoryEvent `json:"events"`
+}
+
+type HistoryEvent struct {
+	Year        string `json:"year"`
+	Description string `json:"description"`
+
+	// Note: optional
+	// Wikipedia   []struct {
+	// 	Title     string `json:"title"`
+	// 	Wikipedia string `json:"wikipedia"`
+	// } `json:"wikipedia"`
 }
 
 func GetHistory() (HistoryToday, error) {
 
-	resp, err := http.Get("https://byabbe.se/on-this-day/1/12/events.json")
+	url := fmt.Sprintf("https://byabbe.se/on-this-day/%d/%d/events.json", time.Now().Month(), time.Now().Day())
+	resp, err := http.Get(url)
 	if err != nil {
 		return HistoryToday{}, err
 	}

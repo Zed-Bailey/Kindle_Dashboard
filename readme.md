@@ -52,6 +52,22 @@ cd into dashboard
 
 that's it. You can put your kindle in a photo frame to hide the body or build a small stand for it
 
+# Stopping it
+if restarting your kindle doesn't kill the process then ssh into your kindle
+run `ps aux | grep "./start.sh"`
+```
+# example output
+[root@kindle us]# ps aux | grep "./start.sh"
+root      3394  0.0  0.2   2432   700 ?        S    03:30   0:00 /bin/sh /opt/amazon/ebook/bin/start.sh
+root      3451  0.0  0.2   2540   580 ?        S    03:30   0:00 /bin/sh /opt/amazon/ebook/bin/start.sh
+root     12427  0.0  0.2   2428   556 ?        S<   04:35   0:02 /bin/sh ./start.sh
+root     27012  0.0  0.1   2428   316 ?        S<   11:41   0:00 /bin/sh ./start.sh
+```
+and kill the non amazon process
+`kill 12427`
+
+
 # resources
-for rsvg-convert
+rsvg-convert was installed from here
 https://www.mobileread.com/forums/showthread.php?t=200621&page=3
+

@@ -1,3 +1,5 @@
+# This is still a work in progress and currently semi works
+
 # Kindle Dashboard
 
 This application has only been test on the kindle 4 nt(no touch). The readme also assumes that you are using a kindle 4 nt as well

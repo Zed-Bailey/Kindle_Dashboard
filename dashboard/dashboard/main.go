@@ -4,95 +4,209 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"math/rand"
-	"os"
-	"strings"
 	"time"
+
+	owm "github.com/briandowns/openweathermap"
+	"github.com/disintegration/imaging"
+	"github.com/fogleman/gg"
 )
 
 // kindle 4 horizontal screen size
-const width int = 800
-const height int = 600
+const width = 800
+const height = 600
+
+const margin = 20
+
+const maxWidth = width - margin
+const maxHeight = height - margin
+
+const fontPath = "../Fonts/Lato-Regular.ttf"
 
 type Config struct {
-	Name              string       `json:"name"`
-	Lat               float64      `json:"lat"`
-	Lon               float64      `json:"lon"`
-	OpenweatherApiKey string       `json:"openweatherApiKey"`
-	LastUpdate        time.Time    `json:"lastUpdate"`
-	HistoryToday      HistoryToday `json:"historyToday"`
+	Lat               float64 `json:"lat"`
+	Lon               float64 `json:"lon"`
+	OpenweatherApiKey string  `json:"openweatherApiKey"`
+	// HistoryToday      HistoryToday `json:"historyToday"`
 }
 
-func displayError(e string) {
-	// fmt.Println("Error: " + e) // debug
-	// exec.Command("eips", fmt.Sprintf("%d", width/2), fmt.Sprintf("%d", height/2), e)
-	log.Println(e)
-}
+// stores the current weather data
+var currentWeather *owm.CurrentWeatherData = &owm.CurrentWeatherData{}
+var lastWeatherCheck time.Time = time.Time{}
+var coords *owm.Coordinates = &owm.Coordinates{}
+var todaysHistory HistoryToday
 
 func main() {
 
-	// load config file
 	configFile, err := ioutil.ReadFile("../config.json")
 	if err != nil {
-		displayError("couldn't read config.json file")
-		return
+		panic(err)
 	}
 
 	config := Config{}
 	_ = json.Unmarshal(configFile, &config)
 
-	// load template svg
-	data, err := os.ReadFile("../svg/template.svg")
+	coords = &owm.Coordinates{
+		Latitude:  config.Lat,
+		Longitude: config.Lon,
+	}
 
+	loadWeather(config.OpenweatherApiKey)
+
+	todaysHistory, err = GetHistory()
 	if err != nil {
-		displayError("couldn't read template.svg")
-		return
+		panic(err)
 	}
 
-	dataString := string(data)
-	updatedTemplate := updateInterval(&config, dataString)
-
-	// write the updated template to a new file
-	// os.WriteFile("./temp.svg", []byte(updatedTemplate), os.ModeAppend) // debug
-	os.WriteFile("../svg/temp.svg", []byte(updatedTemplate), os.ModeAppend)
-	json, _ := json.Marshal(&config)
-	os.WriteFile("../config.json", json, os.ModeAppend)
-}
-
-// updates the time in the svg
-func updateInterval(config *Config, svgData string) string {
-	currTime := time.Now()
-	clock := currTime.Format("3:04 pm")
-
-	svgData = strings.Replace(svgData, "%TIME%", clock, 1)
-
-	if time.Since(config.LastUpdate) >= time.Minute*10 {
-		fmt.Println("more then 10 minutes since last update") // debug
-		// update weather
-		// update history today
-		svgData = strings.Replace(svgData, "%TMP%", "24°", 1)
-		svgData = strings.Replace(svgData, "%condition%", "cloudy", 1)
-	}
-
-	if currTime.Hour() == 0 || config.HistoryToday.Events == nil {
-		// fetch new history today
-		history, err := GetHistory()
-		if err != nil {
-			svgData = strings.Replace(svgData, "%history_today%", err.Error(), 1)
-		} else {
-			config.HistoryToday = history
+	go func() {
+		for {
+			sleepTime := (60 - time.Now().Minute()) % 30
+			// checks for weather every half an hour
+			if time.Since(lastWeatherCheck).Minutes() >= 30 {
+				currentWeather.CurrentByCoordinates(coords)
+				lastWeatherCheck = time.Now()
+			}
+			time.Sleep(time.Minute * time.Duration(sleepTime))
 		}
 
+	}()
+
+	go func() {
+		for {
+			// sleep until the next 24 hour time
+			sleepTime := (24 - time.Now().Hour()) % 24
+			time.Sleep(time.Hour * time.Duration(sleepTime))
+
+			todaysHistory, _ = GetHistory()
+		}
+	}()
+
+	for {
+
+		dc := gg.NewContext(width, height)
+		dc.SetRGB(1, 1, 1)
+		dc.Clear()
+		dc.SetRGB(0, 0, 0)
+		if err := dc.LoadFontFace(fontPath, 20); err != nil {
+			panic(err)
+		}
+
+		drawDate(dc)
+		drawHistory(dc, todaysHistory)
+
+		drawWeather(dc)
+
+		// draw last to avoid unnecessary font reloading
+		drawTime(dc)
+
+		dc.SavePNG("out.png")
+
+		time.Sleep(time.Minute)
 	}
 
-	rand.Seed(time.Now().Unix())
-	index := rand.Intn(len(config.HistoryToday.Events))
-	event := config.HistoryToday.Events[index]
-	formattedHistory := fmt.Sprintf("%s %s %s", config.HistoryToday.Date, event.Year, event.Description)
-	wordwrap := WordWrap(formattedHistory, 70)
-	fmt.Println(wordwrap)
-	svgData = strings.Replace(svgData, "%history_today%", wordwrap, 1)
+}
 
-	return svgData
+func loadWeather(apiKey string) {
+	// if lastWeatherCheck.IsZero() {
+	// load weather
+	// creates a new weather object with metric temperature and english as the returned language
+	currentWeather, err := owm.NewCurrent("C", "EN", apiKey)
+	if err != nil {
+		panic(err)
+	}
+	// queries api and fills struct with data
+	currentWeather.CurrentByCoordinates(coords)
+	// fmt.Println(currentWeather)
+	lastWeatherCheck = time.Now()
+	// }
+
+	// file, _ := ioutil.ReadFile("../weather.json")
+	// _ = json.Unmarshal([]byte(file), &currentWeather)
+}
+
+func drawWeather(dc *gg.Context) {
+
+	weatherWidth := float64(maxWidth) / 2
+	// weatherHeight := float64(maxHeight) / 2
+
+	desc := ""
+	temp := fmt.Sprintf("%.2f°C", currentWeather.Main.Temp)
+	minMax := fmt.Sprintf("%.2f° / %.2f°", currentWeather.Main.TempMin, currentWeather.Main.TempMax)
+	iconPath := ""
+	if len(currentWeather.Weather) > 0 {
+		desc = currentWeather.Weather[0].Description
+		_, err := owm.RetrieveIcon("../Icons", currentWeather.Weather[0].Icon+".png")
+		if err != nil {
+			panic(err)
+		}
+		iconPath = "../Icons/" + currentWeather.Weather[0].Icon + ".png"
+	}
+	if iconPath != "" {
+		im, err := gg.LoadPNG(iconPath)
+		if err != nil {
+			panic(err)
+		}
+		image := imaging.Resize(im, 180, 180, imaging.CatmullRom)
+		dc.DrawImage(image, 100, 210)
+	}
+
+	dc.DrawStringAnchored(desc, weatherWidth/2, 460, 0.5, 0.5)
+
+	dc.DrawStringAnchored(minMax, weatherWidth/2, 500, 0.5, 0.5)
+
+	fmt.Println(desc)
+	fmt.Println(temp)
+	fmt.Println(minMax)
+
+	_ = dc.LoadFontFace(fontPath, 50)
+
+	dc.DrawStringAnchored(temp, weatherWidth/2, 400, 0.5, 0.5)
+}
+
+func drawTime(dc *gg.Context) {
+	currTime := time.Now()
+	clock := currTime.Format("3:04 pm")
+	_ = dc.LoadFontFace(fontPath, 90)
+
+	dc.DrawStringAnchored(clock, maxWidth/2, maxHeight/5, 0.5, 0.5)
+}
+
+func drawDate(dc *gg.Context) {
+	weekday := time.Now().Weekday()
+	day := time.Now().Day()
+	month := time.Now().Month()
+	year := time.Now().Year()
+	hour := time.Now().Hour()
+	greeting := ""
+
+	if hour >= 0 && hour < 12 {
+		// 0 -> 11
+		greeting = "Good Morning"
+	} else if hour >= 12 && hour <= 17 {
+		// 12 -> 5
+		greeting = "Good Afternoon"
+	} else if hour > 17 && hour < 20 {
+		// 5-> 8
+		greeting = "Good Evening"
+	} else {
+		// 8 -> midnight
+		greeting = "Goodnight"
+	}
+
+	// example: Good Afternoon today is Mon 3 April 2023
+	fullGreeting := fmt.Sprintf("%s today is %s %d %s %d", greeting, weekday, day, month, year)
+	dc.DrawStringAnchored(fullGreeting, maxWidth/2, margin*2, 0.5, 0.5)
+}
+
+func drawHistory(dc *gg.Context, history HistoryToday) {
+	rand.Seed(time.Now().Unix())
+	index := rand.Intn(len(history.Events))
+	event := history.Events[index]
+	formattedHistory := fmt.Sprintf("%s %s %s", history.Date, event.Year, event.Description)
+
+	historyWidth := float64(maxWidth) / 2
+	quarter := historyWidth / 2
+	historyHeight := float64(maxHeight) / 2
+
+	dc.DrawStringWrapped(formattedHistory, quarter*3, historyHeight, 0.5, 0.5, historyWidth-(margin*2), 1.5, gg.AlignLeft)
 }

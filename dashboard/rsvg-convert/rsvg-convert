@@ -1,6 +1,0 @@
-#/bin/sh
-#Run rsvg-convert like this:
-HOME=/mnt/us/extensions/rsvg-convert
-lipc-set-prop com.lab126.powerd preventScreenSaver 1
-LD_LIBRARY_PATH=/mnt/us/extensions/rsvg-convert/lib:/usr/lib:/lib /mnt/us/extensions/rsvg-convert/bin/rsvg-convert $1 $2 $3 $4 $5
-lipc-set-prop com.lab126.powerd preventScreenSaver 0

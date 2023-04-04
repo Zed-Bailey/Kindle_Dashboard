@@ -7,5 +7,6 @@ require (
 	github.com/disintegration/imaging v1.6.2 // indirect
 	github.com/fogleman/gg v1.3.0 // indirect
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
+	github.com/shermp/go-fbink-v2 v1.20.2 // indirect
 	golang.org/x/image v0.6.0 // indirect
 )

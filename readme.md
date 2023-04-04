@@ -1,5 +1,3 @@
-# This is still a work in progress and currently semi works
-
 # Kindle Dashboard
 
 This application has only been test on the kindle 4 nt(no touch). The readme also assumes that you are using a kindle 4 nt as well
@@ -18,7 +16,7 @@ once logged into kindle
 you can view some hardware information about your kindle with `cat /proc/cpuinfo`
 
 # Building application
-vector template was created using online vector tool called 'vectr'
+
 **on your computer not kindle**
 make sure you have go installed, currently the project is using go 1.19
 clone this repo
@@ -29,7 +27,6 @@ and enter the following keys
 	"lat" : <your latitude>,
 	"lon" : <your longitude>,
 	"openweatherApiKey" : "<key>",
-	"name" : "<optional>"
 }
 ```
 
@@ -49,12 +46,13 @@ then copy zip to kindle: `scp bundle.zip root@{kindle ip}:/mnt/us/`
 cd into `/mnt/us`
 `unzip bundle.zip`
 cd into dashboard
-`./start.sh &` will start the script and detach from it so that it will run in the background
-
+`./run.sh &` will start the script and detach from it so that it will run in the background
 
 that's it. You can put your kindle in a photo frame to hide the body or build a small stand for it
 
+
 # Stopping it
+**TODO UPDATE**
 if restarting your kindle doesn't kill the process then ssh into your kindle
 run `ps aux | grep "./start.sh"`
 ```
@@ -67,9 +65,3 @@ root     27012  0.0  0.1   2428   316 ?        S<   11:41   0:00 /bin/sh ./start
 ```
 and kill the non amazon process
 `kill 12427`
-
-
-# resources
-rsvg-convert was installed from here
-https://www.mobileread.com/forums/showthread.php?t=200621&page=3
-

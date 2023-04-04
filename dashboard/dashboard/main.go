@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"image/jpeg"
 	"io/ioutil"
 	"math/rand"
 	"time"
@@ -10,6 +12,7 @@ import (
 	owm "github.com/briandowns/openweathermap"
 	"github.com/disintegration/imaging"
 	"github.com/fogleman/gg"
+	"github.com/shermp/go-fbink-v2/gofbink"
 )
 
 // kindle 4 horizontal screen size
@@ -27,17 +30,17 @@ type Config struct {
 	Lat               float64 `json:"lat"`
 	Lon               float64 `json:"lon"`
 	OpenweatherApiKey string  `json:"openweatherApiKey"`
-	// HistoryToday      HistoryToday `json:"historyToday"`
 }
 
 // stores the current weather data
-var currentWeather *owm.CurrentWeatherData = &owm.CurrentWeatherData{}
+var currentWeather *owm.CurrentWeatherData
 var lastWeatherCheck time.Time = time.Time{}
 var coords *owm.Coordinates = &owm.Coordinates{}
 var todaysHistory HistoryToday
 
 func main() {
 
+	// load config file and unmarshal it into the config struct
 	configFile, err := ioutil.ReadFile("../config.json")
 	if err != nil {
 		panic(err)
@@ -46,6 +49,19 @@ func main() {
 	config := Config{}
 	_ = json.Unmarshal(configFile, &config)
 
+	// setup fbink for rendering to the kindles screen
+	fbinkConfig := gofbink.FBInkConfig{
+		Halign: gofbink.Center,
+		Valign: gofbink.Center,
+	}
+	rOpts := gofbink.RestrictedConfig{
+		IsQuiet: true,
+	}
+
+	fbink := gofbink.New(&fbinkConfig, &rOpts)
+	fbink.Init(&fbinkConfig)
+
+	// load inital weather
 	coords = &owm.Coordinates{
 		Latitude:  config.Lat,
 		Longitude: config.Lon,
@@ -53,6 +69,7 @@ func main() {
 
 	loadWeather(config.OpenweatherApiKey)
 
+	// load inital history
 	todaysHistory, err = GetHistory()
 	if err != nil {
 		panic(err)
@@ -99,7 +116,19 @@ func main() {
 		// draw last to avoid unnecessary font reloading
 		drawTime(dc)
 
-		dc.SavePNG("out.png")
+		// save the image to the file system
+		// dc.SavePNG("out.png")
+
+		// fetch context image
+		image := dc.Image()
+
+		// convert to byte buffer
+		buffer := new(bytes.Buffer)
+		_ = jpeg.Encode(buffer, image, nil)
+		buffer.Bytes()
+
+		// writes the raw image bytes to the screen to avoid saving to file system
+		fbink.PrintRawData(buffer.Bytes(), width, height, 0, 0, &fbinkConfig)
 
 		time.Sleep(time.Minute)
 	}
@@ -107,21 +136,19 @@ func main() {
 }
 
 func loadWeather(apiKey string) {
-	// if lastWeatherCheck.IsZero() {
+
 	// load weather
 	// creates a new weather object with metric temperature and english as the returned language
-	currentWeather, err := owm.NewCurrent("C", "EN", apiKey)
+	c, err := owm.NewCurrent("C", "EN", apiKey)
 	if err != nil {
 		panic(err)
 	}
+	currentWeather = c
 	// queries api and fills struct with data
 	currentWeather.CurrentByCoordinates(coords)
-	// fmt.Println(currentWeather)
-	lastWeatherCheck = time.Now()
-	// }
 
-	// file, _ := ioutil.ReadFile("../weather.json")
-	// _ = json.Unmarshal([]byte(file), &currentWeather)
+	lastWeatherCheck = time.Now()
+
 }
 
 func drawWeather(dc *gg.Context) {
@@ -133,6 +160,7 @@ func drawWeather(dc *gg.Context) {
 	temp := fmt.Sprintf("%.2f°C", currentWeather.Main.Temp)
 	minMax := fmt.Sprintf("%.2f° / %.2f°", currentWeather.Main.TempMin, currentWeather.Main.TempMax)
 	iconPath := ""
+
 	if len(currentWeather.Weather) > 0 {
 		desc = currentWeather.Weather[0].Description
 		_, err := owm.RetrieveIcon("../Icons", currentWeather.Weather[0].Icon+".png")
@@ -141,6 +169,7 @@ func drawWeather(dc *gg.Context) {
 		}
 		iconPath = "../Icons/" + currentWeather.Weather[0].Icon + ".png"
 	}
+
 	if iconPath != "" {
 		im, err := gg.LoadPNG(iconPath)
 		if err != nil {
@@ -154,9 +183,10 @@ func drawWeather(dc *gg.Context) {
 
 	dc.DrawStringAnchored(minMax, weatherWidth/2, 500, 0.5, 0.5)
 
-	fmt.Println(desc)
-	fmt.Println(temp)
-	fmt.Println(minMax)
+	// DEBUG
+	// fmt.Println(desc)
+	// fmt.Println(temp)
+	// fmt.Println(minMax)
 
 	_ = dc.LoadFontFace(fontPath, 50)
 
@@ -190,7 +220,7 @@ func drawDate(dc *gg.Context) {
 		greeting = "Good Evening"
 	} else {
 		// 8 -> midnight
-		greeting = "Goodnight"
+		greeting = "Good Night"
 	}
 
 	// example: Good Afternoon today is Mon 3 April 2023
